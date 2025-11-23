@@ -507,3 +507,21 @@ class DCNv2_MPCA(nn.Module):
         self.conv_offset_mask.conv_offset_mask.bias.data.zero_()
 
 # --------------------------------DCN v2 MPCA--------------------end #
+
+
+# Simpler integration into existing Bottleneck
+class Bottleneck_DCN(nn.Module):
+    def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
+        super().__init__()
+        c_ = int(c2 * e)
+        self.cv1 = Conv(c1, c_, k[0], 1)
+        self.cv2 = DCNv2(c_, c2, k[1], 1, g=g)  # Replace only the second conv
+        self.add = shortcut and c1 == c2
+
+    def forward(self, x):
+        return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
+        
+class C2f_DCN(C2f):
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
+        super().__init__(c1, c2, n, shortcut, g, e)
+        self.m = nn.ModuleList(Bottleneck_DCN(self.c, self.c, shortcut, g, k=(3, 3), e=1.0) for _ in range(n))
